@@ -15,33 +15,28 @@ from selenium.webdriver.support import expected_conditions as EC
 from celery import Celery
 from bson import ObjectId
 import traceback
-# main.py (FastAPI backend)
 from fastapi.middleware.cors import CORSMiddleware
 
-# ========== Celery CONFIG ==========
 celery_app = Celery(
     "tasks",
     broker="redis://localhost:6379/0",
     backend="redis://localhost:6379/0",
 )
 
-# ========== FastAPI APP ==========
 app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # React dev server origin
+    allow_origins=["http://localhost:3000"],  
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-# ========== MongoDB Connection ==========
 client = MongoClient("mongodb://localhost:27017/")
 db = client["walmart"]
 task_col = db["tasks"]
 product_col = db["product"]
 client_col = db["clients"]
 
-# ========== Request Models ==========
 class TaskRequest(BaseModel):
     client_name: str
     category: str
@@ -51,7 +46,6 @@ class ClientRequest(BaseModel):
     client_name: str
     client_email: str
 
-# ------------ API ENDPOINTS ------------
 
 @app.post("/register-client/")
 def register_client(client_data: ClientRequest):
@@ -80,7 +74,6 @@ def submit_task(task: TaskRequest):
     }
     result = task_col.insert_one(task_data)
     task_id = str(result.inserted_id)
-    # Start scraping in the background with Celery
     scrape_and_store.delay(task.url, task.category, task.client_name, task_id)
     return {"message": "✅ Task created and scraping started in background", "task_id": task_id}
 
@@ -141,7 +134,6 @@ def list_products(
     ]
     return products
 
-# ========== Celery Scraping Task ==========
 
 @celery_app.task()
 def scrape_and_store(product_url, category, client_name, task_id):
@@ -160,7 +152,7 @@ def scrape_and_store(product_url, category, client_name, task_id):
             "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36"
         )
 
-        # For debugging, headless=False; change to True for headless mode in production
+        #change to True for headless mode in production
         driver = uc.Chrome(options=options, headless=False)
         driver.get(product_url)
         time.sleep(3)
@@ -280,7 +272,7 @@ def scrape_and_store(product_url, category, client_name, task_id):
             "scraped_at": time.strftime("%Y-%m-%d %H:%M:%S")
         }
 
-        # Extract images
+        # Extract data part
         try:
             scroll_to_element('div[data-testid="media-gallery"]')
             image_urls = []
@@ -299,7 +291,6 @@ def scrape_and_store(product_url, category, client_name, task_id):
         except Exception:
             product["images"] = []
 
-        # Extract "about this item"
         try:
             scroll_to_element('div.dangerous-html.mb3', timeout=15)
             about_elem = WebDriverWait(driver, 12).until(
@@ -310,7 +301,6 @@ def scrape_and_store(product_url, category, client_name, task_id):
         except Exception:
             product["about_this_item"] = []
 
-        # Extract related links
         try:
             links = driver.find_elements(By.CSS_SELECTOR, 'a[href*="/ip/"]')
             product["related_links"] = list({a.get_attribute("href").split("?")[0] for a in links if a.get_attribute("href")})
@@ -320,7 +310,6 @@ def scrape_and_store(product_url, category, client_name, task_id):
         product_col.insert_one(product)
         print(f"Saved product to MongoDB for task {task_id}")
 
-        # Append to CSV file - only header if file doesn't exist
         try:
             append_header = not pd.io.common.file_exists("walmart_data.csv")
             df = pd.DataFrame([product])
@@ -339,7 +328,6 @@ def scrape_and_store(product_url, category, client_name, task_id):
         print(f"Scraping error for task {task_id}:\n{err_trace}")
         task_col.update_one({"_id": ObjectId(task_id)}, {"$set": {"status": "failed", "error": str(e)}})
 
-# Run FastAPI app if executed directly
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
