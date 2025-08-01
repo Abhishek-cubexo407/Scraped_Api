@@ -1,4 +1,3 @@
-# main.py
 from typing import Optional
 from fastapi import Query
 from fastapi import FastAPI
@@ -45,7 +44,7 @@ class TaskRequest(BaseModel):
 class ClientRequest(BaseModel):
     client_name: str
     client_email: str
-
+print('changes')
 
 @app.post("/register-client/")
 def register_client(client_data: ClientRequest):
@@ -59,7 +58,7 @@ def register_client(client_data: ClientRequest):
     }
     result = client_col.insert_one(client_doc)
     return {
-        "message": "✅ Client registered successfully",
+        "message": "Client registered successfully",
         "client_id": str(result.inserted_id)
     }
 
@@ -75,7 +74,7 @@ def submit_task(task: TaskRequest):
     result = task_col.insert_one(task_data)
     task_id = str(result.inserted_id)
     scrape_and_store.delay(task.url, task.category, task.client_name, task_id)
-    return {"message": "✅ Task created and scraping started in background", "task_id": task_id}
+    return {"message": "Task created and scraping started in background", "task_id": task_id}
 
 @app.get("/tasks/")
 def list_tasks(
@@ -272,7 +271,7 @@ def scrape_and_store(product_url, category, client_name, task_id):
             "scraped_at": time.strftime("%Y-%m-%d %H:%M:%S")
         }
 
-        # Extract data part
+        #Extract data part
         try:
             scroll_to_element('div[data-testid="media-gallery"]')
             image_urls = []
